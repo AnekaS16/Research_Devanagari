@@ -1,0 +1,115 @@
+"""Tests for Stage 8 Final Scientific Audit and Dashboard Data Preparation."""
+
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+from src.analysis.dashboard_data import (
+    build_dataset_overview,
+    build_eligibility_master,
+    build_pair_level_master,
+    build_scoring_summary,
+    build_stability_summary,
+    build_tokenization_summary,
+    run_stage8_dashboard_data_preparation,
+)
+
+
+class TestDashboardDataTransformations(unittest.TestCase):
+    """Test dashboard aggregation and schema generation."""
+
+    def test_build_dataset_overview(self) -> None:
+        dataset_rows = [
+            {"pair_id": "P1", "track": "VALID_WORD_CONTEXT", "final_status": "accept"},
+            {"pair_id": "P2", "track": "REALISTIC_SPELLING_ERROR", "final_status": "accept"},
+            {"pair_id": "P3", "track": "SYNONYM_SUBSTITUTION", "final_status": "reject"},
+        ]
+        overview, tracks = build_dataset_overview(dataset_rows, "fake_sha")
+        self.assertEqual(overview["total_source_pairs"], 3)
+        self.assertEqual(overview["tracks"]["VALID_WORD_CONTEXT"], 1)
+        self.assertEqual(len(tracks), 3)
+
+    def test_build_tokenization_summary(self) -> None:
+        s2_rows = [
+            {
+                "model_name": "muril",
+                "track": "SYNONYM_SUBSTITUTION",
+                "orig_tokens_count_inclusive": "10",
+                "cont_tokens_count_inclusive": "12",
+                "delta_tokens_inclusive": "2",
+                "token_length_ratio_inclusive": "1.2",
+                "orig_target_token_count": "1",
+                "cont_target_token_count": "2",
+            }
+        ]
+        tok = build_tokenization_summary(s2_rows)
+        self.assertEqual(len(tok), 1)
+        self.assertEqual(tok[0]["pair_count"], 1)
+        self.assertEqual(tok[0]["mean_delta_tokens"], 2.0)
+
+    def test_build_scoring_summary(self) -> None:
+        s3_rows = [
+            {
+                "model_name": "muril",
+                "track": "SYNONYM_SUBSTITUTION",
+                "orig_total_pll": "-15.0",
+                "cont_total_pll": "-20.0",
+                "delta_total_pll": "-5.0",
+                "delta_mean_logprob": "-0.5",
+            }
+        ]
+        sc = build_scoring_summary(s3_rows)
+        self.assertEqual(len(sc), 1)
+        self.assertEqual(sc[0]["orig_preferred_rate"], 1.0)
+        self.assertEqual(sc[0]["mean_delta_pll"], -5.0)
+
+    def test_build_pair_level_master_preserves_empty_metrics(self) -> None:
+        """Verify that unmeasured or ineligible metrics are preserved as empty strings, not zeroes."""
+        s2 = [{"pair_id": "P1", "model_name": "muril", "orig_tokens_count_inclusive": "10", "track": "SYNONYM_SUBSTITUTION"}]
+        s3 = [{"pair_id": "P1", "model_name": "muril", "delta_total_pll": "2.5"}]
+        s6: list[dict[str, str]] = []  # P1 is not in spelling track
+        s7_rel: list[dict[str, str]] = []
+        s7_pairs: list[dict[str, str]] = []
+
+        master = build_pair_level_master(s2, s3, s6, s7_rel, s7_pairs)
+        self.assertEqual(len(master), 1)
+        row = master[0]
+        self.assertEqual(row["pair_id"], "P1")
+        self.assertEqual(row["delta_pll"], "2.5")
+        # Stage 6 and 7 metrics must be explicit empty strings, NOT 0.0
+        self.assertEqual(row["stage6_masked_attn_rho"], "")
+        self.assertEqual(row["stage7_visible_attn_rho"], "")
+        self.assertEqual(row["faithfulness_gap_f20_attn"], "")
+
+    def test_build_eligibility_master(self) -> None:
+        dataset_rows = [{"pair_id": "P1", "track": "SYNONYM_SUBSTITUTION", "final_status": "accept"}]
+        elig = build_eligibility_master(dataset_rows, [], [])
+        self.assertEqual(len(elig), 2)  # 2 models
+        self.assertEqual(elig[0]["stage1_valid"], "True")
+        self.assertEqual(elig[0]["stage6_single_subword_eligible"], "not_in_track")
+
+
+class TestStage8ExecutionAndArtifacts(unittest.TestCase):
+    """Test actual execution of Stage 8 pipeline."""
+
+    def test_stage8_generates_all_dashboard_artifacts(self) -> None:
+        res = run_stage8_dashboard_data_preparation()
+        self.assertTrue(res["audit_completed_successfully"])
+        self.assertGreater(res["pair_master_row_count"], 0)
+        self.assertGreater(res["eligibility_master_row_count"], 0)
+
+        out_dir = Path("outputs/dashboard_data")
+        self.assertTrue((out_dir / "dataset_overview.json").exists())
+        self.assertTrue((out_dir / "dataset_tracks.csv").exists())
+        self.assertTrue((out_dir / "tokenization_summary.csv").exists())
+        self.assertTrue((out_dir / "scoring_summary.csv").exists())
+        self.assertTrue((out_dir / "stability_summary.csv").exists())
+        self.assertTrue((out_dir / "faithfulness_summary.csv").exists())
+        self.assertTrue((out_dir / "pair_level_master.csv").exists())
+        self.assertTrue((out_dir / "eligibility_master.csv").exists())
+        self.assertTrue((out_dir / "scientific_audit_report.md").exists())
+        self.assertTrue((out_dir / "manifest.json").exists())

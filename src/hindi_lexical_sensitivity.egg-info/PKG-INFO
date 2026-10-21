@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: hindi-lexical-sensitivity
+Version: 0.1.0
+Summary: Reproducible research on Hindi lexical sensitivity
+Requires-Python: <3.13,>=3.12
+Provides-Extra: dev
+Requires-Dist: openpyxl>=3.1.2; extra == "dev"
+Requires-Dist: pytest>=8.0.0; extra == "dev"

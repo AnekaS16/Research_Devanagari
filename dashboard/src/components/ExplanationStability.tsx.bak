@@ -1,0 +1,252 @@
+import React, { useState } from 'react';
+import {
+  ShieldAlert,
+  GitCompare,
+  BarChart2,
+} from 'lucide-react';
+import type { StabilitySummary, PairLevelMaster } from '../types';
+
+interface Props {
+  stability: StabilitySummary[];
+  pairMaster: PairLevelMaster[];
+}
+
+export const ExplanationStability: React.FC<Props> = ({ stability, pairMaster }) => {
+  const [selectedMethod, setSelectedMethod] = useState<'ALL' | 'attention' | 'integrated_gradients'>('ALL');
+  const [selectedSubset, setSelectedSubset] = useState<'all_scorable' | 'strict_single_subword'>('all_scorable');
+
+  // Filter spelling pairs
+  const spellingPairs = pairMaster.filter((p) => p.track === 'REALISTIC_SPELLING_ERROR');
+
+  const filteredStability = stability.filter((s) => {
+    const matchMethod = selectedMethod === 'ALL' || s.method === selectedMethod;
+    const matchSubset = s.subset === selectedSubset;
+    return matchMethod && matchSubset;
+  });
+
+  return (
+    <div>
+      {/* Critical Methodology Warning */}
+      <div className="alert-box alert-warning">
+        <ShieldAlert size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
+        <div>
+          <strong style={{ fontSize: '14px' }}>Stage 6 vs. Stage 7 Stability Resolution:</strong>
+          <br />
+          In Stage 6, the target token was masked in both sentences. Because the spelling error was confined to the target word,
+          both model inputs became identical (<code>Masked(Orig) ≡ Masked(Cont)</code>), yielding trivial stability (<code>ρ = 1.0</code>).
+          <br />
+          <strong>Stage 7 resolves this</strong> by keeping the target word visible during prediction. Under visible targets,
+          spelling variations produce genuine attribution shifts across aligned context tokens.
+        </div>
+      </div>
+
+      {/* Stability Metrics Cards */}
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>Stage 6 Masked Stability</span>
+            <span className="badge badge-warning">Design Artifact</span>
+          </div>
+          <div className="metric-value" style={{ color: 'var(--text-muted)' }}>1.000</div>
+          <div className="metric-subtext">Zero variance across all pairs</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>Stage 7 Attention Stability</span>
+            <span className="badge badge-muril">Visible Target</span>
+          </div>
+          <div className="metric-value" style={{ color: '#38bdf8' }}>0.743</div>
+          <div className="metric-subtext">Mean Spearman ρ across models</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>Stage 7 IG Stability</span>
+            <span className="badge badge-xlmr">Visible Target</span>
+          </div>
+          <div className="metric-value" style={{ color: '#818cf8' }}>0.378</div>
+          <div className="metric-subtext">Mean Spearman ρ across models</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>Mean Cosine Similarity</span>
+            <span className="badge badge-success">High Directional Alignment</span>
+          </div>
+          <div className="metric-value" style={{ color: '#34d399' }}>0.965</div>
+          <div className="metric-subtext">Context attribution vector angle</div>
+        </div>
+      </div>
+
+      {/* Method & Subset Controls */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">
+              <GitCompare size={18} color="var(--accent-cyan)" />
+              Visible-Target Explanation Stability by Model & Method
+            </div>
+            <div className="panel-subtitle">
+              Evaluating attribution ranking consistency when Hindi target words are misspelled
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {(['ALL', 'attention', 'integrated_gradients'] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`btn ${selectedMethod === m ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSelectedMethod(m)}
+                >
+                  {m === 'ALL' ? 'All Methods' : m === 'attention' ? 'Attention' : 'Integrated Gradients'}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                className={`btn ${selectedSubset === 'all_scorable' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setSelectedSubset('all_scorable')}
+              >
+                All Scorable (N=20)
+              </button>
+              <button
+                className={`btn ${selectedSubset === 'strict_single_subword' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setSelectedSubset('strict_single_subword')}
+              >
+                Strict Single-Subword
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Method</th>
+                <th>Subset</th>
+                <th>Evaluated Pairs</th>
+                <th>Valid Metrics (N)</th>
+                <th>Stage 6 Masked ρ</th>
+                <th>Stage 7 Visible ρ (Mean)</th>
+                <th>Stage 7 Visible ρ (Median)</th>
+                <th>Cosine Sim (Mean)</th>
+                <th>Methodological Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStability.map((row) => (
+                <tr key={`${row.model_name}_${row.method}_${row.subset}`}>
+                  <td>
+                    <span className={row.model_name.includes('muril') ? 'badge badge-muril' : 'badge badge-xlmr'}>
+                      {row.model_name.includes('muril') ? 'MuRIL' : 'XLM-R'}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: 600 }}>
+                    <code>{row.method}</code>
+                  </td>
+                  <td>
+                    <span className="badge badge-success">{row.subset}</span>
+                  </td>
+                  <td>{row.pair_count}</td>
+                  <td>{row.valid_visible_metric_pairs}</td>
+                  <td style={{ color: 'var(--text-muted)' }}>{row.stage6_masked_target_stability_rho.toFixed(1)}</td>
+                  <td style={{ fontWeight: 700, color: '#38bdf8' }}>
+                    {typeof row.visible_target_stability_rho_mean === 'number'
+                      ? row.visible_target_stability_rho_mean.toFixed(3)
+                      : row.visible_target_stability_rho_mean}
+                  </td>
+                  <td>
+                    {typeof row.visible_target_stability_rho_median === 'number'
+                      ? row.visible_target_stability_rho_median.toFixed(3)
+                      : row.visible_target_stability_rho_median}
+                  </td>
+                  <td style={{ color: '#34d399', fontWeight: 600 }}>
+                    {typeof row.visible_target_cosine_mean === 'number'
+                      ? row.visible_target_cosine_mean.toFixed(4)
+                      : row.visible_target_cosine_mean}
+                  </td>
+                  <td style={{ fontSize: '11.5px', color: 'var(--text-muted)', maxWidth: '300px' }}>
+                    {row.methodological_note}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pair-Level Inspector Table */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">
+              <BarChart2 size={18} color="var(--accent-indigo)" />
+              Pair-Level Stability Inspector (Track: REALISTIC_SPELLING_ERROR)
+            </div>
+            <div className="panel-subtitle">
+              Detailed attribution shifts for all 20 Devanagari spelling error sentence pairs
+            </div>
+          </div>
+        </div>
+
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Pair ID</th>
+                <th>Model</th>
+                <th>Target (Orig / Cont)</th>
+                <th>Original Sentence</th>
+                <th>Contrast Sentence</th>
+                <th>Visible Attn Rho</th>
+                <th>Visible Attn Cosine</th>
+                <th>Visible IG Rho</th>
+                <th>Visible IG Cosine</th>
+              </tr>
+            </thead>
+            <tbody>
+              {spellingPairs.map((p) => (
+                <tr key={`${p.pair_id}_${p.model_name}`}>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#38bdf8' }}>
+                    {p.pair_id}
+                  </td>
+                  <td>
+                    <span className={p.model_name.includes('muril') ? 'badge badge-muril' : 'badge badge-xlmr'}>
+                      {p.model_name.includes('muril') ? 'MuRIL' : 'XLM-R'}
+                    </span>
+                  </td>
+                  <td className="devanagari-text" style={{ fontWeight: 600 }}>
+                    <span style={{ color: '#34d399' }}>{p.target_original}</span>
+                    {' → '}
+                    <span style={{ color: '#fda4af' }}>{p.target_contrast}</span>
+                  </td>
+                  <td className="devanagari-text" style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.original_sentence}
+                  </td>
+                  <td className="devanagari-text" style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.contrast_sentence}
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#38bdf8' }}>
+                    {p.stage7_visible_attn_rho ? Number(p.stage7_visible_attn_rho).toFixed(3) : '—'}
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>
+                    {p.stage7_visible_attn_cosine ? Number(p.stage7_visible_attn_cosine).toFixed(4) : '—'}
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#818cf8' }}>
+                    {p.stage7_visible_ig_rho ? Number(p.stage7_visible_ig_rho).toFixed(3) : '—'}
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>
+                    {p.stage7_visible_ig_cosine ? Number(p.stage7_visible_ig_cosine).toFixed(4) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};

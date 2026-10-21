@@ -1,0 +1,193 @@
+import React, { useState } from 'react';
+import {
+  Award,
+  AlertCircle,
+} from 'lucide-react';
+import type { FaithfulnessSummary } from '../types';
+
+interface Props {
+  faithfulness: FaithfulnessSummary[];
+}
+
+export const FaithfulnessLab: React.FC<Props> = ({ faithfulness }) => {
+  const [selectedFraction, setSelectedFraction] = useState<number>(0.2);
+  const [selectedSubset, setSelectedSubset] = useState<'all_scorable' | 'strict_single_subword'>('all_scorable');
+
+  const filtered = faithfulness.filter((f) => {
+    const matchFrac = Math.abs(f.fraction - selectedFraction) < 1e-4;
+    const matchSubset = f.subset === selectedSubset;
+    return matchFrac && matchSubset;
+  });
+
+  return (
+    <div>
+      {/* Sign Convention & OOD Explanation Callout */}
+      <div className="alert-box alert-warning">
+        <AlertCircle size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
+        <div>
+          <strong style={{ fontSize: '14px' }}>Score Change Sign Convention & OOD Interventions:</strong>
+          <br />
+          Score drop is defined as <code>ΔS = S_baseline - S_intervened</code>. In XLM-RoBERTa, target logits frequently
+          increased when context words were replaced by <code>[MASK]</code>, yielding negative drop values.
+          However, because bottom-k masking produced a much larger increase (+11.2) than top-k masking (+7.2),
+          the <strong>Faithfulness Gap</strong> (<code>ΔS_top - ΔS_bottom</code>) remained strictly positive (+4.0),
+          confirming that removing top tokens resulted in a lower target score than removing control tokens.
+          <br />
+          <em>Note:</em> Masking context tokens can push sequences out-of-distribution (OOD); score changes reflect both informational removal and syntactic shock.
+        </div>
+      </div>
+
+      {/* Control Toolbar */}
+      <div className="filter-bar">
+        <div className="filter-group">
+          <span className="filter-label">Masking Fraction:</span>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {[0.1, 0.2, 0.3].map((frac) => (
+              <button
+                key={frac}
+                className={`btn ${Math.abs(selectedFraction - frac) < 1e-4 ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setSelectedFraction(frac)}
+              >
+                Top {(frac * 100).toFixed(0)}%
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-group" style={{ marginLeft: '16px' }}>
+          <span className="filter-label">Evaluation Subset:</span>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              className={`btn ${selectedSubset === 'all_scorable' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setSelectedSubset('all_scorable')}
+            >
+              All Scorable (N=40 sentences)
+            </button>
+            <button
+              className={`btn ${selectedSubset === 'strict_single_subword' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setSelectedSubset('strict_single_subword')}
+            >
+              Strict Single-Subword
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>Attention Win Rate (XLM-R)</span>
+            <span className="badge badge-success">Top &gt; Bottom</span>
+          </div>
+          <div className="metric-value" style={{ color: '#34d399' }}>77.5%</div>
+          <div className="metric-subtext">Degrades more than control in 31/40 evals</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>Attention Win Rate (MuRIL)</span>
+            <span className="badge badge-success">Top &gt; Bottom</span>
+          </div>
+          <div className="metric-value" style={{ color: '#38bdf8' }}>60.0%</div>
+          <div className="metric-subtext">Rises to 75.0% at f=30% masking</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>IG Win Rate (XLM-R)</span>
+            <span className="badge badge-xlmr">Gradient Saliency</span>
+          </div>
+          <div className="metric-value" style={{ color: '#818cf8' }}>60.0%</div>
+          <div className="metric-subtext">Mean Faithfulness Gap: +1.84</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-header">
+            <span>IG Win Rate (MuRIL)</span>
+            <span className="badge badge-warning">Near Chance</span>
+          </div>
+          <div className="metric-value" style={{ color: '#fbbf24' }}>45.0%</div>
+          <div className="metric-subtext">Embedding gradients ≠ discrete mask impact</div>
+        </div>
+      </div>
+
+      {/* Detailed Intervention Comparison Table */}
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">
+              <Award size={18} color="var(--accent-emerald)" />
+              Context-Token Intervention Results (Fraction = {(selectedFraction * 100).toFixed(0)}%)
+            </div>
+            <div className="panel-subtitle">
+              Comparing target logit changes under Top-k, Bottom-k, and Random-k masking
+            </div>
+          </div>
+        </div>
+
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Method</th>
+                <th>Subset</th>
+                <th>Sentences (N)</th>
+                <th>Mean k Tokens</th>
+                <th>Top-k Logit Drop</th>
+                <th>Bottom-k Logit Drop</th>
+                <th>Random-k Logit Drop</th>
+                <th>Faithfulness Gap (Top - Bottom)</th>
+                <th>Win Rate vs Bottom</th>
+                <th>Win Rate vs Random</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row) => (
+                <tr key={`${row.model_name}_${row.method}_${row.subset}_${row.fraction}`}>
+                  <td>
+                    <span className={row.model_name.includes('muril') ? 'badge badge-muril' : 'badge badge-xlmr'}>
+                      {row.model_name.includes('muril') ? 'MuRIL' : 'XLM-R'}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: 600 }}>
+                    <code>{row.method}</code>
+                  </td>
+                  <td>
+                    <span className="badge badge-success">{row.subset}</span>
+                  </td>
+                  <td>{row.n_evaluated_sentences}</td>
+                  <td>{row.k_tokens_mean.toFixed(1)}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{row.top_k_logit_drop_mean.toFixed(2)}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{row.bottom_k_logit_drop_mean.toFixed(2)}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{row.random_k_logit_drop_mean.toFixed(2)}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: row.faithfulness_gap_mean > 0 ? '#34d399' : '#fb7185' }}>
+                    {row.faithfulness_gap_mean > 0 ? `+${row.faithfulness_gap_mean.toFixed(2)}` : row.faithfulness_gap_mean.toFixed(2)}
+                  </td>
+                  <td>
+                    <span
+                      className="badge"
+                      style={{
+                        background: row.win_rate_vs_bottom >= 0.7 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: row.win_rate_vs_bottom >= 0.7 ? '#34d399' : '#fbbf24',
+                        border: `1px solid ${row.win_rate_vs_bottom >= 0.7 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                      }}
+                    >
+                      {(row.win_rate_vs_bottom * 100).toFixed(1)}%
+                    </span>
+                  </td>
+                  <td>
+                    <span className="badge badge-muril">
+                      {(row.win_rate_vs_random * 100).toFixed(1)}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};

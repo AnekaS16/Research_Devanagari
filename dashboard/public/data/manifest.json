@@ -1,0 +1,19 @@
+{
+  "dataset_sha256": "f9a5af81e21624de47ead7feabba412149939c1eb9934f8fc2b8d452a232cd44",
+  "total_source_pairs": 200,
+  "dashboard_files_generated": [
+    "outputs/dashboard_data/dataset_overview.json",
+    "outputs/dashboard_data/dataset_tracks.csv",
+    "outputs/dashboard_data/tokenization_summary.csv",
+    "outputs/dashboard_data/scoring_summary.csv",
+    "outputs/dashboard_data/stability_summary.csv",
+    "outputs/dashboard_data/faithfulness_summary.csv",
+    "outputs/dashboard_data/pair_level_master.csv",
+    "outputs/dashboard_data/eligibility_master.csv",
+    "outputs/dashboard_data/stability_faithfulness_relationship.csv",
+    "outputs/dashboard_data/scientific_audit_report.md"
+  ],
+  "pair_master_row_count": 400,
+  "eligibility_master_row_count": 400,
+  "audit_completed_successfully": true
+}

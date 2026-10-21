@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/data/validate.py
+src/hindi_lexical_sensitivity.egg-info/PKG-INFO
+src/hindi_lexical_sensitivity.egg-info/SOURCES.txt
+src/hindi_lexical_sensitivity.egg-info/dependency_links.txt
+src/hindi_lexical_sensitivity.egg-info/requires.txt
+src/hindi_lexical_sensitivity.egg-info/top_level.txt
+tests/test_dataset_validation.py

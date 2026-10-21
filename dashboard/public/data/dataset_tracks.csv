@@ -1,0 +1,4 @@
+track,pair_count,percentage,description
+VALID_WORD_CONTEXT,142,71.0,Contextual lexical contrasts
+SYNONYM_SUBSTITUTION,38,19.0,Synonym substitutions
+REALISTIC_SPELLING_ERROR,20,10.0,Realistic Devanagari spelling errors
